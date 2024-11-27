@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Status du Bot avec Graphique</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <h1>Status du bot</h1>
+    <div>
+        Statut du bot : <span id="bot-status">En attente...</span>
+    </div>
+    
+    <div>
+        <strong>Erreurs :</strong>
+        <p id="error-status" style="color: red;"></p>
+    </div>
+
+    <div>
+        <strong>Temps en ligne :</strong>
+        <p id="uptime-status">0 secondes</p>
+    </div>
+
+    <div>
+        <strong>Ping (API) :</strong>
+        <p id="ping-status">0 ms</p>
+    </div>
+
+    <div>
+        <strong>Latence Globale :</strong>
+        <p id="global-latency-status">0 ms</p>
+    </div>
+
+    <canvas id="pingChart" width="400" height="200"></canvas> <!-- Zone pour le graphique -->
+
+    <script>
+        // Crée une connexion WebSocket
+        const socket = new WebSocket("ws://node1.adky.net:3180"); // Remplace par l'adresse du serveur WebSocket
+
+        let startTime; // Variable pour stocker l'heure de démarrage de la connexion
+        const pingData = []; // Historique des pings API
+        const globalLatencyData = []; // Historique des latences globales
+        const timeLabels = []; // Historique des labels (temps)
+
+        // Initialiser Chart.js pour afficher le graphique
+        const ctx = document.getElementById('pingChart').getContext('2d');
+        const pingChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: timeLabels,
+                datasets: [
+                    {
+                        label: 'Ping API (ms)',
+                        data: pingData,
+                        borderColor: 'rgba(75, 192, 192, 1)', // Couleur de la courbe (Ping API)
+                        borderWidth: 2,
+                        tension: 0.1
+                    },
+                    {
+                        label: 'Latence Globale (ms)',
+                        data: globalLatencyData,
+                        borderColor: 'rgba(255, 99, 132, 1)', // Couleur de la courbe (Latence Globale)
+                        borderWidth: 2,
+                        tension: 0.1
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    x: {
+                        title: { display: true, text: 'Temps' }
+                    },
+                    y: {
+                        title: { display: true, text: 'Latence (ms)' },
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+
+        // Événement : Connexion ouverte
+        socket.onopen = () => {
+            console.log("Connexion WebSocket établie.");
+            document.getElementById("error-status").innerText = ''; // Clear error message
+            startTime = Date.now(); // Enregistrer l'heure de démarrage de la connexion
+        };
+
+        // Événement : Réception d'un message du serveur
+        socket.onmessage = (event) => {
+            console.log("Message reçu du serveur :", event.data);
+
+            const data = JSON.parse(event.data); // Convertir le message en JSON
+            
+            // Mise à jour des éléments HTML
+            document.getElementById("bot-status").innerText = data.status;
+            document.getElementById("uptime-status").innerText = data.uptime;
+            document.getElementById("ping-status").innerText = `${data.ping} ms`;
+            document.getElementById("global-latency-status").innerText = `${data.globalLatency}`;
+
+            // Mise à jour du graphique
+            const currentTime = new Date().toLocaleTimeString(); // Temps actuel (HH:mm:ss)
+            timeLabels.push(currentTime); // Ajouter un label de temps
+            pingData.push(data.ping); // Ajouter le ping API au dataset
+            globalLatencyData.push(parseInt(data.globalLatency)); // Ajouter la latence globale au dataset
+
+            // Limiter le nombre de points sur le graphique (ex : max 20)
+            if (timeLabels.length > 20) {
+                timeLabels.shift(); // Supprimer le plus ancien label
+                pingData.shift(); // Supprimer le plus ancien ping API
+                globalLatencyData.shift(); // Supprimer la plus ancienne latence globale
+            }
+
+            pingChart.update(); // Mettre à jour le graphique
+        };
+
+        // Événement : Erreur WebSocket
+        socket.onerror = (error) => {
+            console.error("Erreur WebSocket :", error);
+            document.getElementById("error-status").innerText = 'Erreur de connexion WebSocket : ' + error.message;
+        };
+
+        // Événement : Connexion fermée
+        socket.onclose = () => {
+            console.log("Connexion WebSocket fermée.");
+            document.getElementById("bot-status").innerText = "Bot hors ligne";
+            document.getElementById("error-status").innerText = 'La connexion au serveur WebSocket a été fermée.';
+        };
+    </script>
+</body>
+</html>
